@@ -23,6 +23,8 @@ import com.nickmonks.trivia.data.AnswerListAsyncResponse;
 import com.nickmonks.trivia.data.Repository;
 import com.nickmonks.trivia.databinding.ActivityMainBinding;
 import com.nickmonks.trivia.model.Question;
+import com.nickmonks.trivia.model.Score;
+import com.nickmonks.trivia.util.Prefs;
 
 import org.json.JSONArray;
 
@@ -37,12 +39,24 @@ public class MainActivity extends AppCompatActivity{
     private ActivityMainBinding binding;
     private int currentQuestionIndex = 0; // keep track of n` of the queston
     private List<Question> questions;
+    private int scoreCounter = 0;
+    private Score score;
+    private Prefs prefs;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+
         binding = DataBindingUtil.setContentView(this, R.layout.activity_main);
+        score = new Score();
+        prefs = new Prefs(MainActivity.this);
+
+        // Retrieve the last state
+        currentQuestionIndex = prefs.getState();
+
+        binding.scoreText.setText(String.format("Score: %s", String.valueOf(score.getScore())));
+        binding.textHighest.setText(String.format("Highest :%s", String.valueOf(prefs.getHighestScore())));
 
        questions = new Repository().getQuestions(new AnswerListAsyncResponse() {
             @Override
@@ -57,24 +71,26 @@ public class MainActivity extends AppCompatActivity{
         // we will force the mainactivitty to implemente onClick directly, so "this" is effectively a View
         // we will add a switch statement to choose if the clock was done by one or another button
         binding.trueButton.setOnClickListener(v -> {
-            Log.d("DEBUG", "onCreate: TRUE CLICKED");
             checkAnswer(true);
             updateQuestion();
         });
 
         binding.falseButton.setOnClickListener(v -> {
-            Log.d("DEBUG", "onCreate: FALSE CLICKED");
             checkAnswer(false);
             updateQuestion();
 
         });
 
         binding.nextButton.setOnClickListener(v -> {
-            currentQuestionIndex = (currentQuestionIndex + 1) % questions.size();
-            updateQuestion();
+            getNextQuestion();
         });
 
 
+    }
+
+    private void getNextQuestion() {
+        currentQuestionIndex = (currentQuestionIndex + 1) % questions.size();
+        updateQuestion();
     }
 
     private void checkAnswer(boolean userChose) {
@@ -84,10 +100,11 @@ public class MainActivity extends AppCompatActivity{
         if (userChose == answer) {
             snackMessageId = R.string.correct_answer;
             fadeAnimation();
-            updateQuestion();
+            addPoints();
         } else {
             snackMessageId = R.string.incorrect;
             shakeAnimation();
+            deductPoints();
         }
         Log.d("DEBUG", String.format("onCreate - checkAnswer: %d", snackMessageId));
         make(binding.cardView, snackMessageId, LENGTH_SHORT).show();
@@ -103,6 +120,7 @@ public class MainActivity extends AppCompatActivity{
         binding.questionTextview.setText(question);
         updateCounter((ArrayList<Question>) questions);
     }
+
     private void shakeAnimation() {
         Animation shake = AnimationUtils.loadAnimation(MainActivity.this, R.anim.shake_animation);
         binding.cardView.setAnimation(shake);
@@ -117,7 +135,7 @@ public class MainActivity extends AppCompatActivity{
             @Override
             public void onAnimationEnd(Animation animation) {
                 binding.questionTextview.setTextColor(Color.WHITE);
-
+                getNextQuestion();
             }
 
             @Override
@@ -143,6 +161,7 @@ public class MainActivity extends AppCompatActivity{
             @Override
             public void onAnimationEnd(Animation animation) {
                 binding.questionTextview.setTextColor(Color.WHITE);
+                getNextQuestion();
             }
 
             @Override
@@ -150,5 +169,36 @@ public class MainActivity extends AppCompatActivity{
 
             }
         });
+    }
+
+    private void deductPoints(){
+
+
+        if (scoreCounter > 0)
+        {
+            scoreCounter -=100;
+            score.setScore(scoreCounter);
+            binding.scoreText.setText("Score: " + String.valueOf(score.getScore()));
+        } else {
+            scoreCounter = 0;
+            score.setScore(scoreCounter);
+            Log.d("SCORE", "deductPoints: "+score.getScore());
+
+        }
+    }
+
+    private void addPoints(){
+        scoreCounter +=100;
+        score.setScore(scoreCounter);
+        binding.scoreText.setText("Score: " + String.valueOf(score.getScore()));
+        Log.d("SCORE", "addPoints: "+score.getScore());
+    }
+
+    @Override
+    protected void onPause() {
+        // right after we pause the application, we save the highest score.
+        prefs.saveHighestScore(score.getScore());
+        prefs.seState(currentQuestionIndex);
+        super.onPause();
     }
 }
